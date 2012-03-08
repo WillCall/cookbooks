@@ -1,0 +1,5 @@
+#!/bin/bash
+
+exec 2>&1
+
+exec remote_syslog -c /etc/remote_syslog/log_files.yml --no-detach

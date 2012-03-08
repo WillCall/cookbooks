@@ -1,0 +1,13 @@
+#!/bin/bash
+<% if @node["delayed_job"]["queues"] != "*" %>
+QUEUES="<%= @node["delayed_job"]["queues"] %>"
+<% end %>
+
+cd <%= @options[:app]['deploy_to'] %>/current
+
+exec 2>&1
+<% if @options[:app]['gems'].has_key?('bundler') %>
+exec chpst -e /etc/sv/dj_<%= @options[:app]["id"] %>_<%= @options[:worker] %>/env -u <%= @options[:app]["owner"] %>:<%= @options[:app]["group"] %> bundle exec rake jobs:work
+<% else %>
+exec chpst -e /etc/sv/dj_<%= @options[:app]["id"] %>_<%= @options[:worker] %>/env -u <%= @options[:app]["owner"] %>:<%= @options[:app]["group"] %> rake jobs:work
+<% end %>

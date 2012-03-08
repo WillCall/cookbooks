@@ -1,6 +1,6 @@
 global
-        log 127.0.0.1   local0
-        log 127.0.0.1   local1 notice
+        log <%= node["haproxy"]["syslog_host"] %>   local0
+        log <%= node["haproxy"]["syslog_host"] %>   local1 notice
         #log loghost    local0 info
         maxconn 4096
         #debug
@@ -16,9 +16,9 @@ defaults
         retries 3
         redispatch
         maxconn 2000
-        contimeout      5000
-        clitimeout      50000
-        srvtimeout      50000
+        contimeout      <%= node["haproxy"]["contimeout"] %>
+        clitimeout      <%= node["haproxy"]["clitimeout"] %>
+        srvtimeout      <%= node["haproxy"]["srvtimeout"] %>
         <% if node["haproxy"]["x_forwarded_for"] -%>
         option httpclose
         option forwardfor
@@ -28,7 +28,7 @@ defaults
 listen application 0.0.0.0:<%= node["haproxy"]["incoming_port"] %>
   balance <%= node["haproxy"]["balance_algorithm"] %>
   <% @pool_members.each do |member| -%>
-  server <%= member[:hostname] %> <%= member[:ipaddress] %>:<%= node["haproxy"]["member_port"] %> weight 1 maxconn <%= node["haproxy"]["member_max_connections"] %> check
+  server <%= member[:hostname] %> <%= member[:ipaddress] %>:<%= node["haproxy"]["member_port"] %> weight 1 maxconn <%= member[:max_connections] %> check <%= member[:backup] ? "backup" : "" %>
   <% end -%>
 
 <% if node["haproxy"]["enable_ssl"] -%>
@@ -36,7 +36,7 @@ listen ssl_application 0.0.0.0:<%= node["haproxy"]["ssl_incoming_port"] %>
   balance <%= node["haproxy"]["balance_algorithm"] %>
   mode tcp
   <% @pool_members.each do |member| -%>
-  server <%= member[:hostname] %> <%= member[:ipaddress] %>:<%= node["haproxy"]["ssl_member_port"] %> weight 1 maxconn <%= node["haproxy"]["member_max_connections"] %> check
+  server <%= member[:hostname] %> <%= member[:ipaddress] %>:<%= node["haproxy"]["ssl_member_port"] %> weight 1 maxconn <%= member[:max_connections] %> check <%= member[:backup] ? "backup" : "" %>
   <% end -%>
 <% end -%>
 

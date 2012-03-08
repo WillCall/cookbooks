@@ -1,0 +1,450 @@
+log_format willcall '$proxy_add_x_forwarded_for - $remote_user [$time_local]  '
+                    '"$request" $status $body_bytes_sent '
+                    '"$http_referer" "$http_user_agent"';
+                    
+upstream haproxy_server {
+  <% @haproxy_servers.each do |haproxy_server| -%>
+    server <%= haproxy_server[:ipaddress] %>:<%= haproxy_server[:port] %><%= haproxy_server[:backup]? " backup" : "" %>; # <%= haproxy_server[:hostname] %>
+  <% end -%>
+}
+
+upstream sxsw_server {
+  server 10.1.1.251:8080;
+  server 10.1.1.11:8080;
+  server 10.1.1.24:8080;
+  server 10.1.1.59:8080;
+}
+
+<% if @wordpress_servers.length > 0 %>
+upstream wordpress_server {
+  <% @wordpress_servers.each do |wp| %>
+  server <%= wp[:ipaddress] %>:80;
+  <% end %>
+}
+<% end %>
+
+map $http_accept $accept_html {
+   default 1;
+   ~text/html 1;
+   ~\*/\* 1;
+   ~application/json 0;
+   ~application/xml 0;
+}
+
+map $http_user_agent $is_mobile {
+    default 0;
+    ~android.+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge\ |maemo|midp|mmp|opera\ m(ob|in)i|palm(\ os)?|phone|p(ixi|re)\/|plucker|pocket|psp|symbian|treo|up\.(browser|link)|vodafone|wap|windows\ (ce|phone)|xda|xiino 1;
+    ~^(1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a\ wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r\ |s\ )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1\ u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp(\ i|ip)|hs\-c|ht(c(\-|\ |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac(\ |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt(\ |\/)|klon|kpt\ |kwc\-|kyo(c|k)|le(no|xi)|lg(\ g|\/(k|l|u)|50|54|e\-|e\/|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(di|rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-|\ |o|v)|zz)|mt(50|p1|v\ )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v\ )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-|\ )|webc|whit|wi(g\ |nc|nw)|wmlb|wonu|x700|xda(\-|2|g)|yas\-|your|zeto|zte\-) 1;
+    ~iPhone|iPod 1;
+    ~*linux.*android|windows\s+(?:ce|phone) 1;
+}
+
+map $http_user_agent $is_ios {
+    default 0;
+    ~iPhone|iPod|iPad 1;
+}
+
+map $http_via $varnish {
+    default 0;
+    ~varnish 1;
+}
+
+
+server {
+  listen 80;
+
+  access_log /var/log/nginx/willcall-access.log willcall;
+  error_log /var/log/nginx/willcall-error.log info;
+
+  client_max_body_size 4G;
+  server_name  development.getwillcall.com;
+
+  keepalive_timeout 5;
+
+  # Location of our static files
+  root /srv/willcall/current/public;
+
+  error_page 500 502 503 504 /500.html;
+  
+  location = /m {
+      if ($is_ios) {
+      	rewrite ^ http://itunes.apple.com/us/app/willcall/id454583681 redirect;
+      }
+      if ($is_ios = 0) {
+          rewrite ^ / redirect;
+      }
+  }
+    
+  location / {
+      try_files $uri $uri/index.html $uri.html @app;
+  }
+
+  location @app {
+            
+        if ($accept_html) {
+          set $format "HTML";
+        }
+        if ($request_uri ~* "(.*).json") {
+          set $format "JSON";
+        }
+        if ($request_uri ~* "(.*).xml") {
+          set $format @"XML";
+        }
+
+        if ($is_mobile)  {
+          set $redirect_mobile "MOBILE";
+        }
+        if ($is_mobile = 0)  {
+          set $redirect_mobile "DESKTOP";
+        }
+        if ($request_uri ~* "^/(support|about|terms|FAQ|admin|sxsw)") {
+          set $redirect_mobile "${redirect_mobile}NONJS";
+        }
+        if ($request_uri ~* "^/users/auth/facebook") {
+          set $redirect_mobile "${redirect_mobile}FACEBOOK";
+        }
+        if ($request_uri ~* "^/assets(/.+)$") {
+            set $redirect_mobile "${redirect_mobile}ASSETS";
+        }
+        if ($request_uri ~* "^/mobile(/.+)$") {
+            set $redirect_mobile "${redirect_mobile}REDIRECTED";
+        }
+        set $redirect_mobile "${redirect_mobile}${format}";
+        
+        if ($request_uri ~* "^/referrals") {
+            set $redirect_mobile "${redirect_mobile}REFERRALS";
+        }
+        if ($redirect_mobile = "MOBILEHTMLREFERRALS") {
+            rewrite ^ / redirect;
+        }        
+        if ($redirect_mobile = "MOBILEHTML") {
+          rewrite ^(.*)$ /mobile break;
+        }
+      
+        # proxy_set_header        X-Real-IP       $remote_addr;
+        proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+        # proxy_set_header X-Request-Start    't=$start_time';
+        proxy_no_cache $varnish;
+        proxy_set_header Host $http_host;
+
+        proxy_redirect off;
+
+        proxy_intercept_errors on;
+
+        proxy_pass http://haproxy_server;
+        
+  }
+
+}
+
+server {
+  listen 80;
+    
+  access_log /var/log/nginx/willcall-access.log willcall;
+  error_log /var/log/nginx/willcall-error.log warn;
+
+  client_max_body_size 4G;
+  server_name  *.getwillcall.com getwillcall.com;
+
+  keepalive_timeout 5;
+
+  # Location of our static files
+  root /srv/willcall/current/public;
+
+  error_page 500 502 503 504 /500.html;
+
+  proxy_set_header X-Request-Start    't=$start_time';
+  proxy_set_header X-Queue-Start    't=$start_time';
+
+  if ($scheme != "https") {
+    set $redirect_http NGINX;
+  }
+  if ($http_x_forwarded_proto != "https" ) {
+    set $redirect_http  "${redirect_http}ELB";
+  }
+  if ($request_method = POST) {
+    set $redirect_http  "${redirect_http}POST";
+  }
+  if ($redirect_http = NGINXELB) {
+    rewrite ^(.*) https://$host$1 permanent;
+  }
+    
+  location /sxsw {
+      proxy_cache default;
+      proxy_pass http://sxsw_server/;
+      proxy_set_header        Host            $host;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+
+  location = /m {
+      if ($is_ios) {
+      	rewrite ^ http://itunes.apple.com/us/app/willcall/id454583681 redirect;
+      }
+      if ($is_ios = 0) {
+          rewrite ^ / redirect;
+      }
+  }
+    
+  location ~* /sitemaps {
+      rewrite  ^/sitemaps/(.*)$  https://willcall.s3-us-west-2.amazonaws.com/sitemaps/$1;
+  }
+  
+  location / {
+      try_files $uri $uri/index.html $uri.html @app;
+  }
+  
+  location ^~ /manager {
+      alias /srv/willcall_manager/current/public;
+      index index.html;
+  }
+
+  location @app {
+      
+    if ($accept_html) {
+    set $format "HTML";
+    }
+    if ($request_uri ~* "(.*).json") {
+    set $format "JSON";
+    }
+    if ($request_uri ~* "(.*).xml") {
+    set $format @"XML";
+    }
+
+    if ($is_mobile)  {
+    set $redirect_mobile "MOBILE";
+    }
+    if ($is_mobile = 0)  {
+    set $redirect_mobile "DESKTOP";
+    }
+    if ($request_uri ~* "^/(support|about|terms|FAQ|admin|sxsw)") {
+      set $redirect_mobile "${redirect_mobile}NONJS";
+    }
+    if ($request_uri ~* "^/users/auth/facebook") {
+      set $redirect_mobile "${redirect_mobile}FACEBOOK";
+    }
+    if ($request_uri ~* "^/assets(/.+)$") {
+      set $redirect_mobile "${redirect_mobile}ASSETS";
+    }
+    if ($request_uri ~* "^/mobile(/.+)$") {
+      set $redirect_mobile "${redirect_mobile}REDIRECTED";
+    }
+    set $redirect_mobile "${redirect_mobile}${format}";
+    if ($request_uri ~* "^/referrals") {
+        set $redirect_mobile "${redirect_mobile}REFERRALS";
+    }
+    if ($redirect_mobile = "MOBILEHTMLREFERRALS") {
+        rewrite ^ / redirect;
+    }        
+    
+    if ($redirect_mobile = "MOBILEHTML") {
+        rewrite ^(.*)$ /mobile break;
+    }
+      
+    # proxy_set_header        X-Real-IP       $remote_addr;
+    proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+    # proxy_set_header X-Request-Start    't=$start_time';
+    proxy_no_cache $varnish;
+    proxy_set_header Host $http_host;
+
+    proxy_redirect off;
+    proxy_intercept_errors on;
+
+    proxy_pass http://haproxy_server;
+  }
+  
+  location ~ ^/(assets)/  {
+    # root /srv/willcall/current/public;
+    gzip on;
+    gzip_http_version 1.0;
+    gzip_proxied any;
+    gzip_types text/css application/x-javascript;
+    gzip_vary on;
+    expires max;
+    add_header Cache-Control public;
+    break;
+  }
+  
+  location /channel.html {
+	expires max;
+    add_header Cache-Control public;
+    break;
+  }
+  
+  <% if @wordpress_servers.length > 0 %>
+  location /blog/ {
+    # Note the trailing slash on the proxy_pass.
+    # It tells nginx to replace /service/ with / when passing the request.
+    proxy_pass http://wordpress_server/;
+    proxy_set_header        Host            $host;
+    # proxy_set_header        X-Real-IP       $remote_addr;
+    proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+  location /blog {
+    rewrite https://$host/blog/ permanent;
+  }
+  location /wp-admin/ {
+    rewrite https://$host/blog/wp-admin/ permanent;
+  }
+  <% end %>
+}
+
+server {
+  listen 443;
+  ssl    on;
+
+  access_log /var/log/nginx/willcall-access.log willcall;
+  error_log /var/log/nginx/willcall-error.log warn;
+
+  ssl_certificate      /srv/willcall/shared/getwillcall_com.crt;
+  ssl_certificate_key  /srv/willcall/shared/getwillcall_com.key;  
+
+  client_max_body_size 4G;
+  server_name  getwillcall.com  www.getwillcall.com  *.getwillcall.com;
+
+  keepalive_timeout 5;
+
+  # Location of our static files
+  root /srv/willcall/current/public;
+
+  error_page 500 502 503 504 /500.html;
+
+  if ($scheme != "https") {
+    set $redirect_http NGINX;
+  }
+  if ($http_x_forwarded_proto != "https" ) {
+    set $redirect_http  "${redirect_http}ELB";
+  }
+  if ($request_method = POST) {
+    set $redirect_http  "${redirect_http}POST";
+  }
+  if ($redirect_http = NGINXELB) {
+    rewrite ^(.*) https://$host$1 permanent;
+  }
+
+  location /sxsw {
+      proxy_cache default;
+      proxy_pass http://sxsw_server/;
+      proxy_set_header        Host            $host;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+
+  location = /m {
+      if ($is_ios) {
+      	rewrite ^ http://itunes.apple.com/us/app/willcall/id454583681 redirect;
+      }
+      if ($is_ios = 0) {
+          rewrite ^ / redirect;
+      }
+  }
+    
+  location ~* /sitemaps {
+      rewrite  ^/sitemaps/(.*)$  https://willcall.s3-us-west-2.amazonaws.com/sitemaps/$1;
+  }
+  
+  location / {
+      try_files $uri $uri/index.html $uri.html @app;
+  }
+
+  location @app {
+      
+    if ($accept_html) {
+    set $format "HTML";
+    }
+    if ($request_uri ~* "(.*).json") {
+    set $format "JSON";
+    }
+    if ($request_uri ~* "(.*).xml") {
+    set $format @"XML";
+    }
+
+    if ($is_mobile)  {
+    set $redirect_mobile "MOBILE";
+    }
+    if ($is_mobile = 0)  {
+    set $redirect_mobile "DESKTOP";
+    }
+    if ($request_uri ~* "^/(support|about|terms|FAQ|admin|sxsw)") {
+      set $redirect_mobile "${redirect_mobile}NONJS";
+    }
+    if ($request_uri ~* "^/users/auth/facebook") {
+      set $redirect_mobile "${redirect_mobile}FACEBOOK";
+    }
+    if ($request_uri ~* "^/assets(/.+)$") {
+      set $redirect_mobile "${redirect_mobile}ASSETS";
+    }
+    if ($request_uri ~* "^/mobile(/.+)$") {
+      set $redirect_mobile "${redirect_mobile}REDIRECTED";
+    }
+    set $redirect_mobile "${redirect_mobile}${format}";
+    if ($request_uri ~* "^/referrals") {
+        set $redirect_mobile "${redirect_mobile}REFERRALS";
+    }
+    if ($redirect_mobile = "MOBILEHTMLREFERRALS") {
+        rewrite ^ / redirect;
+    }        
+    
+    if ($redirect_mobile = "MOBILEHTML") {
+        rewrite ^(.*)$ /mobile break;
+    }
+      
+    # proxy_set_header        X-Real-IP       $remote_addr;
+    proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+    # proxy_set_header X-Request-Start    't=$start_time';
+    proxy_no_cache $varnish;
+    proxy_set_header Host $http_host;
+
+    proxy_redirect off;
+    proxy_intercept_errors on;  
+
+    proxy_pass http://haproxy_server;
+  }
+  
+  location ~ ^/(assets)/  {
+    # root /srv/willcall/current/public;
+    gzip on;
+    gzip_http_version 1.0;
+    gzip_proxied any;
+    gzip_types text/css application/x-javascript;
+    gzip_vary on;
+    expires max;
+    add_header Cache-Control public;
+    break;
+  }
+  
+  location /channel.html {
+	expires max;
+    add_header Cache-Control public;
+    break;
+  }
+  
+  <% if @wordpress_servers.length > 0 %>
+  location /blog/ {
+    # Note the trailing slash on the proxy_pass.
+    # It tells nginx to replace /service/ with / when passing the request.
+    proxy_pass http://wordpress_server/;
+    proxy_set_header        Host            $host;
+    # proxy_set_header        X-Real-IP       $remote_addr;
+    proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+  location /blog {
+    rewrite https://$host/blog/ permanent;
+  }
+  location /wp-admin/ {
+    rewrite https://$host/blog/wp-admin/ permanent;
+  }
+  <% end %>
+}
+
+server {
+  listen 80;
+  server_name localhost;
+  location /nginx_status {
+    stub_status on;
+    access_log off;
+    allow 127.0.0.1;
+    deny all;
+  }   
+}
+
+
+

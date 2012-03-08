@@ -1,0 +1,11 @@
+maintainer       "WillCall"
+maintainer_email "ptescher@getwillcall.com"
+license          "Apache 2.0"
+description      "Set up WillCall specific stuff"
+version          "0.0.4"
+
+depends "cron"
+depends "nginx"
+depends "haproxy"
+depends "application"
+depends "mongodb"

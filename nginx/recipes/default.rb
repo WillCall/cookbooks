@@ -55,3 +55,7 @@ service "nginx" do
   supports :status => true, :restart => true, :reload => true
   action [ :enable, :start ]
 end
+
+if node.recipes.include?("monit::default") or node.recipes.include?("monit")
+  monitrc "nginx-monit", {"pidfile" => node[:nginx][:pid]}
+end

@@ -40,3 +40,7 @@ template "/etc/haproxy/haproxy.cfg" do
   mode 0644
   notifies :restart, "service[haproxy]"
 end
+
+if node.recipes.include?("monit::default") or node.recipes.include?("monit")
+  monitrc "haproxy", {"pidfile" => "/var/run/haproxy.pid"}
+end

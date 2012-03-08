@@ -37,7 +37,21 @@ pool_members.map! do |member|
       member['ipaddress']
     end
   end
-  {:ipaddress => server_ip, :hostname => member['hostname']}
+  
+  max_connections = node["haproxy"]["member_max_connections"]
+  if member['unicorn'] && member['unicorn']['worker_processes']
+    max_connections = member['unicorn']['worker_processes']
+  end
+  backup = false
+  if member.attribute?('ec2')
+    if node.attribute?('ec2') && (member['ec2']['placement_availability_zone'] == node['ec2']['placement_availability_zone'])
+      backup = false
+    else
+      backup = true
+    end
+  end
+  
+  {:ipaddress => server_ip, :hostname => member['hostname'], :max_connections => max_connections, :backup => backup}
 end
 
 package "haproxy" do
@@ -63,4 +77,8 @@ template "/etc/haproxy/haproxy.cfg" do
   mode 0644
   variables :pool_members => pool_members.uniq
   notifies :restart, "service[haproxy]"
+end
+
+if node.recipes.include?("monit::default") or node.recipes.include?("monit")
+  monitrc "haproxy", {"pidfile" => "/var/run/haproxy.pid"}
 end

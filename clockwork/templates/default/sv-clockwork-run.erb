@@ -1,0 +1,11 @@
+#!/bin/bash
+
+cd <%= @options[:app]['deploy_to'] %>/current
+
+exec 2>&1
+
+<% if @options[:app]['gems'].has_key?('bundler') %>
+exec chpst -e /etc/sv/<%= @options[:app]["id"] %>/env -u <%= @options[:app]["owner"] %>:<%= @options[:app]["group"] %> bundle exec clockwork config/clock.rb
+<% else %>
+exec chpst -e /etc/sv/<%= @options[:app]["id"] %>/env -u <%= @options[:app]["owner"] %>:<%= @options[:app]["group"] %> clockwork config/clock.rb
+<% end %>

@@ -171,3 +171,7 @@ cookbook_file "#{node[:nginx][:dir]}/mime.types" do
   mode "0644"
   notifies :reload, resources(:service => "nginx"), :immediately
 end
+
+if node.recipes.include?("monit::default") or node.recipes.include?("monit")
+  monitrc "nginx-monit", {"pidfile" => node[:nginx][:pid]}
+end
