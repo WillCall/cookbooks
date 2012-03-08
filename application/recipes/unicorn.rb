@@ -25,7 +25,8 @@ node.default[:unicorn][:worker_timeout] = 60
 node.default[:unicorn][:preload_app] = false
 node.default[:unicorn][:worker_processes] = [node[:cpu][:total].to_i * 4, 8].min
 node.default[:unicorn][:preload_app] = false
-node.default[:unicorn][:before_fork] = 'sleep 1' 
+node.default[:unicorn][:before_fork] = 'sleep 1'
+node.default[:unicorn][:after_fork] = nil
 node.default[:unicorn][:port] = '8080'
 node.set[:unicorn][:options] = { :tcp_nodelay => true, :backlog => 100 }
 
@@ -36,6 +37,14 @@ unicorn_config "/etc/unicorn/#{app['id']}.rb" do
   preload_app node[:unicorn][:preload_app] 
   worker_processes node[:unicorn][:worker_processes]
   before_fork node[:unicorn][:before_fork] 
+  after_fork node[:unicorn][:after_fork]
+  pid "#{app['deploy_to']}/shared/pids/unicorn.pid"
+  owner app['owner']
+  group app['group'] 
+end
+
+if  !app['env_vars'].nil? and !app['env_vars'][node.chef_environment].nil?
+  env_vars = app['env_vars'][node.chef_environment]
 end
 
 runit_service app['id'] do
@@ -46,11 +55,12 @@ runit_service app['id'] do
     :rails_env => node.run_state[:rails_env] || node.chef_environment,
     :smells_like_rack => ::File.exists?(::File.join(app['deploy_to'], "current", "config.ru"))
   )
+  env env_vars
   run_restart false
 end
 
 if ::File.exists?(::File.join(app['deploy_to'], "current"))
-  d = resources(:deploy_revision => app['id'])
+  d = resources(:deploy => app['id'])
   d.restart_command do
     execute "/etc/init.d/#{app['id']} hup"
   end
